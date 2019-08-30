@@ -34,6 +34,8 @@ class Adviser:
             fitting_data = self.bpm_Y[db_indxs]
         else:
             print("adviser error")
+        print("fitting data is nan? ", fitting_data[np.isnan(fitting_data)])
+        print("current data is nan? ",cur_state[np.isnan(cur_state)])
         indices = self.find_nearest_neighbors(n_neighbors=n_files, fitting_data=fitting_data, ref_data=cur_state)
 
         mf_list = self.get_info(indices, db_indxs)
@@ -77,7 +79,7 @@ class Adviser:
         self.timestamps = np.array(self.cor_table["timestamp"])
         self.cor_ids = np.array([float(x) for x in self.cor_table["ids"]])
         self.cor_kicks = np.array(self.cor_table["kicks"])
-        self.cor_moments = np.array(self.cor_table["moments"])
+        self.cor_moments = np.array(self.cor_table["moments"]) if "moments" in self.cor_table else []
         self.cor_ref_names = self.cor_table["cor_names"]
         self.authors = np.array(self.cor_table["author"])
         self.comments = np.array(self.cor_table["comment"])

@@ -181,7 +181,7 @@ c3_ah1_1_5_i1 = Cavity(l=0.346, v=0.0024999884, freq=3900000000.0, phi=180.0, ei
 c3_ah1_1_6_i1 = Cavity(l=0.346, v=0.0024999884, freq=3900000000.0, phi=180.0, eid='C3.AH1.1.6.I1')
 c3_ah1_1_7_i1 = Cavity(l=0.346, v=0.0024999884, freq=3900000000.0, phi=180.0, eid='C3.AH1.1.7.I1')
 c3_ah1_1_8_i1 = Cavity(l=0.346, v=0.0024999884, freq=3900000000.0, phi=180.0, eid='C3.AH1.1.8.I1')
-tdsa_52_i1 = Cavity(l=0.7, v=0.0, freq=2800000.0, phi=0.0, eid='TDSA.52.I1')
+tdsa_52_i1 = TDCavity(l=0.7, v=0.0, freq=2997000.0, phi=0.0, eid='TDSA.52.I1')
 
 # UnknowElement 
 
@@ -259,6 +259,9 @@ bl_48i_i1.ps_id = 'BL.1.I1'
 bl_48ii_i1.ps_id = 'BL.1.I1'
 bl_50i_i1.ps_id = 'BL.3.I1'
 bl_50ii_i1.ps_id = 'BL.4.I1'
-
-
+lat = MagneticLattice(cell)
+tws = twiss(lat, tws0=tws)
+from ocelot.gui import *
+plot_opt_func(lat, tws)
+plt.show()
 

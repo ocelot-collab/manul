@@ -18,7 +18,7 @@ from ocelot.cpbd.magnetic_lattice import *
 from ocelot.optimizer.mint.xfel_interface import *
 import logging
 import numbers
-from devices import *
+from mint.devices import *
 # filename="logs/afb.log",
 #logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class UIAFeedBack(QWidget, Ui_Form):
         #self.paren = main_parent
         #self.ui = self.parent.ui
         self.setupUi(self)
-        self.loadStyleSheet()
+        self.loadStyleSheet(filename=orbit.parent.ui.style_file)
         self.orbit_class = orbit
         self.parent = self.orbit_class.parent
         self.mi = self.parent.mi
@@ -60,8 +60,7 @@ class UIAFeedBack(QWidget, Ui_Form):
         #print("load style")
         self.configs_dir = "./configs/"
         self.golden_orbit = {}
-        self.mi_standard_fb = MIStandardFeedback()
-        self.mi_standard_fb.mi = self.parent.mi
+        self.mi_standard_fb = None
         self.pb_start_feedback.clicked.connect(self.start_stop_feedback)
 
         self.pb_start_statistics.clicked.connect(self.start_stop_statistics)
@@ -91,15 +90,19 @@ class UIAFeedBack(QWidget, Ui_Form):
         self.counter = 0
         #self.debug_mode = False
         #if self.parent.mi.__class__ == TestMachineInterface:
-        #    self.debug_mode = True
-        self.debug_mode = self.parent.debug_mode
-        logger.info("debug_mode = " + str(self.debug_mode))
+        #    self.dev_mode = True
+        self.dev_mode = self.parent.dev_mode
+        logger.info("dev_mode = " + str(self.dev_mode))
         self.first_go_x = []
         self.first_go_y = []
         self.cur_go_x = []
         self.cur_go_y = []
         self.cb_load_settings.addItem("SASE1 launch")
+        self.cb_load_settings.addItem("SASE3 launch")
         self.cb_load_settings.addItem("SASE1 aircoils")
+        self.cb_load_settings.addItem("SASE2 launch")
+        
+        self.cb_load_settings.addItem("test")
         self.cb_load_settings.setCurrentIndex(0)
         self.pb_load_settings.clicked.connect(self.load_presettings)
         self.pb_save_settings.clicked.connect(self.save_presettings)
@@ -181,7 +184,22 @@ class UIAFeedBack(QWidget, Ui_Form):
         except Exception as e:
             logger.error("load_presettings: " +str(e))
             raise
-            
+        if self.cb_load_settings.currentText() == "SASE3 launch":
+        
+            self.mi_standard_fb = MISASE3Feedback()
+            self.mi_standard_fb.mi = self.parent.mi
+        
+        elif self.cb_load_settings.currentText() == "SASE1 launch":
+            self.mi_standard_fb = MIStandardFeedback()
+            self.mi_standard_fb.mi = self.parent.mi
+        
+        elif self.cb_load_settings.currentText() == "SASE2 launch":
+            self.mi_standard_fb = MISASE2Feedback()
+            self.mi_standard_fb.mi = self.parent.mi
+        else:
+            self.mi_standard_fb = None
+        
+        
         for cor in self.orbit_class.corrs:
             if cor.id not in active_corrs:
                 cor.ui.uncheck()
@@ -237,13 +255,12 @@ class UIAFeedBack(QWidget, Ui_Form):
         self.orbit_class.golden_orbit.set_golden_orbit()
 
         self.orbit = self.orbit_class.create_Orbit_obj()
-        
         if self.orbit == None:
             logger.warning("start_stop_statistics: self.orbit is None. Stop Statistics")
             
             self.stop_statistics()
-            self.error_box("Check BPMs or Load/reload settings and try again" )
-            
+            self.error_box("No Beam or BPMs were not selected! Check BPMs or Load/reload settings and try again." )
+            return
         if self.pb_start_statistics.text() == "Statistics Accum Off":
             self.stop_statistics()
 
@@ -284,7 +301,7 @@ class UIAFeedBack(QWidget, Ui_Form):
 
         if self.pb_start_statistics.text() == "Statistics Accum On":
             return 0
-        if self.mi_standard_fb.is_running():
+        if self.mi_standard_fb != None and self.mi_standard_fb.is_running():
             self.error_box("Standard FeedBack is runinning!")
             logger.info("start_stop_feedback: St.FB is running")
             return 0
@@ -315,13 +332,14 @@ class UIAFeedBack(QWidget, Ui_Form):
         #if beam_on:
         #start = time.time()
         #print("ref time", time.time())
-        try: 
-            is_st_fb_running = self.mi_standard_fb.is_running()
-        except Exception as e:
-            logger.warning("error during status of st. FB reading: " + str(e))
-            is_st_fb_running = False
+        if self.mi_standard_fb != None:
+            try: 
+                is_st_fb_running = self.mi_standard_fb.is_running()
+            except Exception as e:
+                logger.warning("error during status of st. FB reading: " + str(e))
+                is_st_fb_running = False
             
-        if is_st_fb_running:
+        if self.mi_standard_fb != None and is_st_fb_running:
             #self.error_box("Standard FeedBack is runinning!")
             logger.info("auto_correction: St.FB is running. Stop Ad. FB")
             self.stop_feedback()
@@ -420,9 +438,8 @@ class UIAFeedBack(QWidget, Ui_Form):
             self.calc_correction[cor.id] = cor.angle
 
         alpha = 0.#self.ui.sb_alpha.value()
-
         self.orbit.correction(alpha=alpha, p_init=None, epsilon_x=self.parent.svd_epsilon_x,
-                              epsilon_y=self.parent.svd_epsilon_y, print_log=False)
+                              epsilon_y=self.parent.svd_epsilon_y, beta=0, print_log=False)
 
         for cor in self.orbit.corrs:
             self.calc_correction[cor.id] = cor.angle
@@ -487,10 +504,13 @@ class UIAFeedBack(QWidget, Ui_Form):
 
         for elem in self.orbit.bpms:
             try:
-                x_mm, y_mm = elem.mi.get_pos()
+
+                x_mm, y_mm = elem.mi.get_pos_frontend()
                 charge = elem.mi.get_charge()
-                if not self.debug_mode and charge < charge_thresh:
-                    logger.info("charge < charge_thresh: " + str(charge < charge_thresh))
+                if not self.dev_mode and charge < charge_thresh:
+                    # TODO: add a checking for beam on/off
+                    if self.orbit_class.xfel_mps.is_orbit_on():
+                        logger.info("charge < charge_thresh: " + str(charge < charge_thresh))
                     self.le_warn.clear()
                     self.le_warn.setText(elem.id + " charge < charge_thresh")
                     self.le_warn.setStyleSheet("color: red")
@@ -515,7 +535,7 @@ class UIAFeedBack(QWidget, Ui_Form):
     def read_data(self):
         beam_on, orbit_x, orbit_y, orbit_s = self.read_bpms()
 
-        if not beam_on and not self.debug_mode:
+        if not beam_on and not self.dev_mode:
             return beam_on
         target = self.read_objective_function()
         if target == None:
@@ -831,13 +851,13 @@ class UIAFeedBack(QWidget, Ui_Form):
             line_edit.setStyleSheet("color: red")
         return state
 
-    def loadStyleSheet(self):
+    def loadStyleSheet(self, filename):
         """
         Sets the dark GUI theme from a css file.
         :return:
         """
         try:
-            self.cssfile = "gui/style.css"
+            self.cssfile = "gui/" + filename
             with open(self.cssfile, "r") as f:
                 self.setStyleSheet(f.read())
         except IOError:

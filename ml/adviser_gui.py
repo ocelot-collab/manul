@@ -12,7 +12,7 @@ from gui.UIAdviser import Ui_Form
 from ml.adviser import Adviser
 import json
 import numpy as np
-from devices import MIAdviser
+from mint.devices import MIAdviser
 import logging 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,11 @@ class ManulAdviser(QWidget):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
         # self.setStyleSheet("background-color:black;")
-        self.loadStyleSheet()
+        self.loadStyleSheet(filename=self.master.ui.style_file)
         # self.ui.gridLayout_2.setContentsMargins(0, 0, 0, 0)
 
         self.mi_adv = MIAdviser()
+        self.mi_adv.bpm_server = "ORBIT" #"BPM" #
         self.mi_adv.mi = self.master.mi
         self.flag_dump_bpm = self.ui.cb_remove_dump_bpm.isChecked()
         self.adviser = Adviser(cor_file="./ml/cor_essence.json", bpm_file="./ml/bpm_essence.json", dump=not(self.flag_dump_bpm))
@@ -64,8 +65,10 @@ class ManulAdviser(QWidget):
             golden_orbit[name] = [self.go_bpm_x[i]/1000, self.go_bpm_y[i]/1000] # mm -> m
 
     def set_slider(self):
+        
         min_sase = np.min(self.adviser.sases)
         max_sase = np.max(self.adviser.sases)
+        print("SASE = ", min_sase, max_sase, self.adviser.sases)
         self.ui.horizontalSlider.setMinimum(min_sase)
         self.ui.horizontalSlider.setMaximum(max_sase)
         self.ui.lab_sase_max.setText(str(max_sase))
@@ -352,10 +355,10 @@ class ManulAdviser(QWidget):
 
         return False
 
-    def loadStyleSheet(self):
+    def loadStyleSheet(self, filename):
         """ Load in the dark theme style sheet. """
         try:
-            self.cssfile = self.master.gui_dir + "style.css"
+            self.cssfile = self.master.gui_dir + filename
             print(self.cssfile)
             with open(self.cssfile, "r") as f:
                 # print(f)

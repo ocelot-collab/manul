@@ -17,9 +17,10 @@ class LatSection:
         self.tw = tw
 
 
-class XFELLattice:
+class Lattice:
     def __init__(self, path="lattices.phase_advance_5pi_sase2"):
         self.lat_zi = 23.2 # start position of the lattice in [m]
+        self.default_section = "I1"
         self.config = {"I1":       path + ".i1",
                        "L1":       path + ".l1",
                        "L2":       path + ".l2",
@@ -76,18 +77,18 @@ class XFELLattice:
             LatSection("L1", str_cells = ["L1"], z0=62.1),
             LatSection("L2", str_cells=["L2"], z0=229.30),
             LatSection("L3", str_cells=["L2", "L3", "CL"], start=self.lats["L2"].engrd_419_b2,
-                               stop=self.lats["CL"].mpbpmi_1693_cl, z0=396.22, tw=tws_L3),
+                               stop=self.lats["CL"].mpbpmi_1693_cl, z0=396.22+23.2, tw=tws_L3),
 
             LatSection("CL", str_cells=["L3", "CL", "TL34", "SASE1"], start=self.lats["L3"].bpmr_1307_l3,
-                               stop=self.lats["SASE1"].qa_2253_sa1, z0=1359.637 + 23.2, tw=tws_cl),
+                               stop=self.lats["SASE1"].qa_2253_sa1, z0=1307, tw=tws_cl),
 #
-            LatSection("SASE1", str_cells=[ "TL34", "SASE1", "T4"], stop=self.lats["T4"].ensub_2583_t4, z0=1957.18564),
-            LatSection("T4", str_cells=["T4"], z0=2438.517),
+            LatSection("SASE1", str_cells=[ "TL34", "SASE1", "T4"], stop=self.lats["T4"].ensub_2583_t4, z0=1957.18564 + 23.2),
+            LatSection("T4", str_cells=["T4"], z0=2438.517 + 23.2),
 #
             LatSection("SASE3", str_cells=["T4", "SASE3"], start=self.lats["T4"].ensub_2583_t4,
-                       z0=2560.45, tw=tws_sase3),
+                       z0=2560.45 + 23.2, tw=tws_sase3),
 
-            LatSection("SASE2", str_cells=["TL34_SA2", "T1", "SASE2", "T3", "T5"], z0=1957.18564),
+            LatSection("SASE2", str_cells=["TL34_SA2", "T1", "SASE2", "T3", "T5"], z0=1957.18564+23.2),
 
             LatSection("up to B1", str_cells=["I1", "L1"]),
             LatSection("up to B2", str_cells=["I1", "L1", "L2"]),
@@ -167,7 +168,6 @@ class XFELLattice:
             return tws_i
         seq = [copy(elem) for elem in self.get_slice_sequence(sequence, stop=stop_element)]
         tws = twiss(MagneticLattice(seq[:-1]), tws_i)
-        #print(tws[-1])
         return tws[-1]
 
 
@@ -197,32 +197,6 @@ class XFELLattice:
         return section
 
 
-        #print(a.cell_i1)
-        #print(a.qi_63_i1d.ps_id)
-        #for lat_file in self.lat_files:
-#
-        #    a = importlib.__import__(lat_file)
-
-
-        #self.cell_back_track = (cell_i1 + cell_l1 + cell_l2 + cell_l3_no_cl + cell_cl)
-#
-        #lat = MagneticLattice(cell_l3_no_cl+cell_cl+cell_sase1, start=bpmr_1307_l3, stop=qa_2253_sa1)
-        #self.cl_copy = deepcopy(lat.sequence)
-#
-        #lat = MagneticLattice(cell_l2 + cell_l3_no_cl + cell_cl, start=engrd_419_b2, stop=mpbpmi_1693_cl)
-        #self.l3_copy = deepcopy(lat.sequence)
-#
-        #lat = MagneticLattice(cell_sase1+cell_t4, stop=ensub_2583_t4)
-        #self.sase1_copy = deepcopy(lat.sequence)
-#
-        #lat = MagneticLattice(cell_t4 + cell_sase3, start=ensub_2583_t4)
-        #self.sase3_copy = deepcopy(lat.sequence)
-#
-        #self.copy_cells = deepcopy((cell_i1, cell_l1, cell_l2, cell_l3_no_cl, cell_cl,
-        #                                 cell_i1d, cell_b1d, cell_b2d, cell_tld, cell_sase1, cell_sase3, cell_t4))
-#
-        #self.big_sequence = list(flatten(cell_i1 + cell_l1 + cell_l2 + cell_l3_no_cl +
-        #                           cell_cl + cell_sase1 + cell_t4 + cell_sase3))
 
 
 if __name__ == "__main__":

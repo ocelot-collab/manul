@@ -48,7 +48,7 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
         indx = path.find("ocelot" + os.sep + "optimizer")
         self.path2ocelot = path[:indx]
         self.path2manul = path[:path.find("manul")]
-
+        print("path to manul", self.path2manul)
         self.optimizer_path = self.path2ocelot + "ocelot" + os.sep + "optimizer" + os.sep
         self.config_dir = self.path2ocelot + "config_optim" +os.sep
         self.gold_orbits_dir = self.path2manul + "manul" + os.sep + "golden_orbits" + os.sep
@@ -72,7 +72,9 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
 
         self.cb_energy_ch.addItem("CL")
         self.cb_energy_ch.addItem("T4D")
-        self.cb_energy_ch.setCurrentIndex(0)
+        self.cb_energy_ch.addItem("TLD")
+        self.cb_energy_ch.addItem("T4")
+        self.cb_energy_ch.setCurrentIndex(2)
 
 
         self.statistics_timer = pg.QtCore.QTimer()
@@ -114,30 +116,37 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
             sase = pydoocs.read("XFEL.FEL/XGM.PREPROCESSING/XGM.2643.T9.CH0/RESULT.TD")["data"]
             sase = np.mean(sase)
             if self.cb_energy_ch.currentText() == "CL":
-                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/CL/ENERGY.SA1")["data"]
+                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/CL/ENERGY.ALL")["data"]
             elif self.cb_energy_ch.currentText() == "T4D":
-                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/T4D/ENERGY.SA1")["data"]
+                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/T4D/ENERGY.ALL")["data"]
+            elif self.cb_energy_ch.currentText() == "TLD":
+                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/TLD/ENERGY.ALL")["data"]
+            elif self.cb_energy_ch.currentText() == "T4":
+                energy_ch = pydoocs.read("XFEL.DIAG/BEAM_ENERGY_MEASUREMENT/T4/ENERGY.ALL")["data"]
             else:
                 print("Wrong Energy Channel")
+                
+                energy_ch = 0
 
-            orbit_x = pydoocs.read("XFEL.DIAG/ORBIT/*/X.SA1")
-            orbit_y = pydoocs.read("XFEL.DIAG/ORBIT/*/Y.SA1")
+            orbit_x = pydoocs.read("XFEL.DIAG/ORBIT/*/X.ALL")
+            orbit_y = pydoocs.read("XFEL.DIAG/ORBIT/*/Y.ALL")
         except:
-            print("bad readings")
-            return 
+            self.error_box("Error during reading from DOOCS.")
+            return False 
         self.sase_array[i] = sase
         self.energy_array[i] = energy_ch
-        values_x = np.array([data["float"] for data in orbit_x["data"]])
-        values_y = np.array([data["float"] for data in orbit_y["data"]])
+        values_x = np.array([data[1] for data in orbit_x["data"]])
+        values_y = np.array([data[1] for data in orbit_y["data"]])
         #names = [data["str"] for data in orbit["data"]]
         self.bpms_x[:,i] = values_x[:]
         self.bpms_y[:,i] = values_y[:]
+        return True
         #print(sase, values_x[100])
 
     def correl_matrix(self, x, y):
         x_var = x - np.mean(x)
         y_var = y - np.mean(y)
-        correl = np.sum(x_var * y_var)
+        correl = np.mean(x_var * y_var)/np.std(x_var)/np.std(y_var)
         #if not np.any(x_var) or not np.any(x_var):
         #    print("wrong orbit reasing")
         return correl
@@ -191,12 +200,14 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
             
     def loop(self):
         
-        self.read_once(self.counter)
+        ok = self.read_once(self.counter)
+        if not ok:
+            self.stop_statistics()
         self.counter += 1
         self.n_real_readings += 1
         print(self.counter)
         ration = int(self.sb_update_rate.value()*10)
-        if self.counter%ration == ration - 1:
+        if self.counter % ration == ration - 1:
             self.calculate_correlation(self.n_real_readings)
         if self.counter == self.sb_n_shots.value():
             self.counter = 0
@@ -222,9 +233,9 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
         self.counter = 0
         self.n_real_readings = 0
         #delay = self.sb_update_rate.value()*1000
-        orbit = pydoocs.read("XFEL.DIAG/ORBIT/*/X.SA1")
-        values = np.array([data["float"] for data in orbit["data"]])
-        names = [data["str"] for data in orbit["data"]]
+        orbit = pydoocs.read("XFEL.DIAG/ORBIT/*/X.ALL")
+        values = np.array([data[1] for data in orbit["data"]])
+        names = [data[4] for data in orbit["data"]]
 
         indx_bpma_2591 = names.index("BPMA.2591.T4")
         self.bpm_index = indx_bpma_2591
@@ -406,7 +417,7 @@ class ManulInterfaceWindow(QMainWindow, Ui_MainWindow):
     def loadStyleSheet(self):
         """ Sets the dark GUI theme from a css file."""
         try:
-            self.cssfile = "gui/style.css"
+            self.cssfile = "gui/colinDark.css"
             with open(self.cssfile, "r") as f:
                 self.setStyleSheet(f.read())
         except IOError:

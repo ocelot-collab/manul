@@ -2,7 +2,7 @@
 Sergey Tomin, XFEL/DESY, 2017
 """
 import numpy as np
-from devices import *
+from mint.devices import *
 import time
 import pyqtgraph as pg
 from PyQt5 import QtGui, QtCore
@@ -18,7 +18,7 @@ class DispersionInterface:
         self.ui.cb_cav_list.addItem("A2.L1")
         self.ui.cb_cav_list.addItem("A3.L2")
         self.ui.cb_cav_list.addItem("A4.L2")
-        self.ui.cb_cav_list.addItem("A5.L3")
+        self.ui.cb_cav_list.addItem("A5.L2")
 
         self.ui.cb_cav_list.addItem("A6.L3")
         self.ui.cb_cav_list.addItem("A7.L3")

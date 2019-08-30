@@ -232,7 +232,8 @@ bb_191_b1 = SBend(l = 0.5, angle=-0.0539306739, e1=-0.0539306739, e2=0.0, gap=0,
 bb_193_b1 = SBend(l = 0.5, angle=-0.0539306739, e1=0.0, e2=-0.0539306739, gap=0, tilt=1.570796327, fint=0.0, fintx=0.0, eid='BB.193.B1')
 bb_202_b1 = SBend(l = 0.5, angle=0.0539306739, e1=0.0539306739, e2=0.0, gap=0, tilt=1.570796327, fint=0.0, fintx=0.0, eid='BB.202.B1')
 
-# correctors 
+# correctors
+cbb_62_i1d = Hcor(l=0., angle=0.0, eid= 'CBB.62.I1D')
 ciy_63_i1 = Vcor(l=0.1, angle=0.0, eid='CIY.63.I1')
 cix_65_i1 = Hcor(l=0.1, angle=0.0, eid='CIX.65.I1')
 ciy_72_i1 = Vcor(l=0.1, angle=0.0, eid='CIY.72.I1')
@@ -489,7 +490,7 @@ c_a2_4_5_l1 = Cavity(l=1.0377, v=0.0178125, freq=1300000000.0, phi=0.0, eid='C.A
 c_a2_4_6_l1 = Cavity(l=1.0377, v=0.0178125, freq=1300000000.0, phi=0.0, eid='C.A2.4.6.L1')
 c_a2_4_7_l1 = Cavity(l=1.0377, v=0.0178125, freq=1300000000.0, phi=0.0, eid='C.A2.4.7.L1')
 c_a2_4_8_l1 = Cavity(l=1.0377, v=0.0178125, freq=1300000000.0, phi=0.0, eid='C.A2.4.8.L1')
-tdsb_208_b1 = Cavity(l=1.5, v=0.0, freq=2800000.0, phi=0.0, eid='TDSB.208.B1')
+tdsb_208_b1 = TDCavity(l=1.5, v=0.0, freq=2997000.0, phi=0.0, eid='TDSB.208.B1')
 
 # UnknowElement 
 
@@ -497,8 +498,10 @@ tdsb_208_b1 = Cavity(l=1.5, v=0.0, freq=2800000.0, phi=0.0, eid='TDSB.208.B1')
 
 # Solenoids 
 
+d_1_1 = (Drift(l=0.125), cbb_62_i1d, Drift(l=d_1.l - 0.125))
+
 # lattice 
-cell = (ensub_62_i1, stsub_62_i1, d_1, ciy_63_i1, d_2, qi_63_i1, d_3,
+cell = (ensub_62_i1, stsub_62_i1, d_1_1, ciy_63_i1, d_2, qi_63_i1, d_3,
 bpma_63_i1, d_4, cix_65_i1, d_5, qi_66_i1, d_6, qi_69_i1, d_7, 
 qi_71_i1, d_8, bpma_72_i1, d_9, qi_72_i1, d_9, ciy_72_i1, d_11, 
 cix_73i_i1, d_2, stlat_73_i1, match_73_i1, qi_73_i1, id_90904668_, d_13, bl_73_i1, 

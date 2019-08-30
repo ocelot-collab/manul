@@ -2,49 +2,45 @@
 """
 Sergey Tomin. XFEL/DESY, 2017.
 """
-#QT imports
-from PyQt5.QtGui import QPixmap
-from PyQt5 import QtGui, QtCore
-from PyQt5.QtWidgets import QApplication, QFrame, QMessageBox, QMainWindow, QDialog
-import numpy as np
+
+from PyQt5.QtWidgets import QFrame, QMainWindow
 import sys
 import os
-import time
-import pyqtgraph as pg
-from copy import deepcopy
-from scipy import optimize
-import json
-import importlib
+import argparse
 import logging
 
 # filename="logs/afb.log",
-#filename="logs/manul.log"
-logging.basicConfig(filename="logs/manul.log", format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
+# filename = "logs/manul.log"
+#filename = "/home/xfeloper/log/ocelot/manul.log"
+#logging.basicConfig(filename=filename, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
+# logging.getLogger("__main__").setLevel(logging.DEBUG)
 path = os.path.realpath(__file__)
 indx = path.find("manul")
 print("PATH to main file: " + os.path.realpath(__file__) + " path to folder"+ path[:indx])
 sys.path.append(path[:indx])
-sys.path.append("C:/Users/tomins/Documents/Dropbox/DESY/repository/ocelot")
+#sys.path.append("C:/Users/tomins/Documents/Dropbox/DESY/repository/ocelot")
 
 
-from ocelot import *
 #from ocelot.gui.accelerator import *
 from ocelot.cpbd.track import *
 
-#from ocelot.optimizer.mint.opt_objects import Device
-from ocelot.optimizer.mint.xfel_interface import *
+from mint.xfel_interface import *
+from mint.bessy_interface import *
 
 
 from orbit import OrbitInterface
-from devices import *
 from dispersion import *
 from gui.gui_main import *
 from gui.settings_gui import *
 from ml.adviser_gui import *
-from lattices import lattice_manager
+
+
 logger = logging.getLogger(__name__)
 
+
+AVAILABLE_MACHINE_INTERFACES = [XFELMachineInterface, TestMachineInterface, BESSYMachineInterface,
+                                BESSYTestInterface]
 
 
 class ManulInterfaceWindow(QMainWindow):
@@ -58,8 +54,25 @@ class ManulInterfaceWindow(QMainWindow):
         Make the timer object that updates GUI on clock cycle during a scan.
         """
         # PATHS
-        #self.load_lattice_files()
 
+        self.tool_args = None
+        self.parse_arguments()
+        self.dev_mode = self.tool_args.devmode
+
+        args = vars(self.tool_args)
+        if self.dev_mode:
+            self.mi = TestMachineInterface(args)
+        else:
+            class_name = self.tool_args.mi
+            print(class_name)
+            if class_name not in globals():
+                print("Could not find Machine Interface with name: {}. Loading XFELMachineInterface instead.".format(class_name))
+                self.mi = XFELMachineInterface(args)
+            else:
+                self.mi = globals()[class_name](args)
+
+
+        print(self.mi.__class__)
         path = os.path.realpath(__file__)
         indx = path.find("ocelot" + os.sep + "optimizer")
         self.path2ocelot = path[:indx]
@@ -67,10 +80,11 @@ class ManulInterfaceWindow(QMainWindow):
 
         self.optimizer_path = self.path2ocelot + "ocelot" + os.sep + "optimizer" + os.sep
         self.config_dir = self.path2manul + "manul" + os.sep + "configs" + os.sep
+        self.config_file = self.config_dir + "settings.json"
         self.gui_dir = self.path2manul + "manul" + os.sep + "gui" + os.sep
-        self.gold_orbits_dir = self.path2manul + "manul" + os.sep + "golden_orbits" + os.sep
+        self.gold_orbits_dir = "/home/xfeloper/data/golden_orbits/" # self.path2manul + "manul" + os.sep + "golden_orbits" + os.sep
         self.gold_orbits_from_OD_dir = "/home/xfeloper/data/orbit_display/"#self.path2manul + "manul" + os.sep + "golden_orbits" + os.sep
-        self.rm_files_dir = self.path2manul + "manul" + os.sep + "rm_files" + os.sep
+        self.rm_files_dir_root = self.path2manul + "manul" + os.sep + "rm_files" + os.sep
         self.set_file = self.config_dir + "default.json" # ./parameters/default.json"
         self.obj_func_path = self.optimizer_path + "mint" + os.sep + "obj_function.py"
         self.obj_save_path = self.config_dir +  "obj_funcs" + os.sep
@@ -80,54 +94,56 @@ class ManulInterfaceWindow(QMainWindow):
         #self.logbook = "xfellog"
         self.settings = None
         self.adviser = None
-        #self.mi = XFELMachineInterface()
-        self.mi = TestMachineInterface()
-        self.debug_mode = False
-        if self.mi.__class__ == TestMachineInterface:
-            self.debug_mode = True
+        #self.mi = BESSYMachineInterface()
+        #self.mi = TestMachineInterface()
+        #self.debug_mode = False
+        #if self.mi.__class__ == TestMachineInterface:
+        #    self.debug_mode = True
         self.ui = MainWindow(self)
+
+        # hide/show the block of the section selection and arbitrary part of section
+        if self.mi.hide_section_selection is True:
+            self.ui.frame.hide()
+        # hide/show the checkbox "close orbit" (actually close trajectory)
+        if self.mi.hide_close_trajectory is True:
+            self.ui.cb_close_orbit.hide()
+
+        if self.mi.hide_xfel_specific is True:
+            self.ui.cb_caxy.hide()
+            self.ui.cb_cbxy.hide()
+            #self.ui.horizontalLayout.hide()
+
+        if self.mi.hide_dispersion_tab is True:
+            self.ui.tabWidget_2.removeTab(1)
+
 
         self.show_correction_result = True
 
 
         self.subtrain = self.ui.combo_subtrain.currentText()
         self.load_settings()
-        self.server = "XFEL"
+        #self.server = "XFEL"
         #self.subtrain = "SA1"
 
         self.orbit = OrbitInterface(parent=self)
         self.dispersion = DispersionInterface(parent=self)
 
         self.ui.action_Parameters.triggered.connect(self.run_settings_window)
+
         try:
-            self.xfel_lattice = lattice_manager.XFELLattice(path="lattices." + self.path2lattice)
-        except:
-            self.error_box("Could not load lattice files. Check path in settings and try again.")
+            #self.xfel_lattice = lattice_manager.XFELLattice(path="lattices." + self.path2lattice)
+            self.xfel_lattice = self.mi.lattice_manager.Lattice(path="lattices." + self.path2lattice)
+
+        except Exception as exc:
+            self.error_box("Could not load lattice files. Check the path in settings and try again. Path: "
+                           + "lattices." + self.path2lattice + " Error: " + str(exc))
             return
 
         self.online_calc = True
-
-        #QFrame.__init__(self)
-        #self.ui = UiS_Form()
-        #self.ui.setupUi(self)
-
-
-        #load in the dark theme style sheet
-        self.loadStyleSheet()
-
-
-        #timer for plots, starts when scan starts
         self.multiPvTimer = QtCore.QTimer()
-        #self.multiPvTimer.timeout.connect(self.getPlotData)
-        #self.initTable()
-        #print("quads", self.quads)
+
         self.add_plot()
 
-
-        #self.ui.cb_lattice.setCurrentIndex(0)
-
-        #self.correctors_list(seq=self.big_sequence, energy=130)
-        #self.change_subtrain()
         self.timer_live = pg.QtCore.QTimer()
         self.timer_live.timeout.connect(self.orbit.live_orbit)
 
@@ -136,48 +152,66 @@ class ManulInterfaceWindow(QMainWindow):
 
         self.load_lattice_files()
         self.lat = self.return_lat()
-        #self.tws0 = self.return_tws()
-        #self.load_lattice()
 
         self.ui.pb_write.clicked.connect(self.calc_twiss)
         self.ui.pb_read.clicked.connect(self.read_quads)
         self.ui.pb_reset.clicked.connect(self.reset_quads)
 
-        #self.ui.cb_lattice.currentIndexChanged.connect(self.return_lat)
         self.ui.cb_otr55.setChecked(True)
         self.ui.cb_coupler_kick.stateChanged.connect(self.apply_coupler_kick)
         self.ui.cb_sec_order.stateChanged.connect(self.apply_second_order)
-        #self.ui.pb_write.clicked.connect(self.match)
-        #self.ui.pb_reload.clicked.connect(self.reload_lat)
 
         self.ui.pb_set_pos.clicked.connect(self.arbitrary_lattice)
-
 
         self.ui.actionGO_Adviser.triggered.connect(self.run_adviser_window)
         self.ui.combo_subtrain.currentIndexChanged.connect(self.change_subtrain)
 
+
+    def parse_arguments(self):
+        parser = argparse.ArgumentParser(description="Ocelot Orbit Correction",
+                                         add_help=False)
+        parser.set_defaults(mi='XFELMachineInterface')
+        parser.add_argument('--devmode', action='store_true',
+                            help='Enable development mode.', default=False)
+
+        parser_mi = argparse.ArgumentParser()
+
+        mis = [mi.__class__.__name__ for mi in AVAILABLE_MACHINE_INTERFACES]
+        subparser = parser_mi.add_subparsers(title='Machine Interface Options', dest="mi")
+        for mi in AVAILABLE_MACHINE_INTERFACES:
+            mi_parser = subparser.add_parser(mi.__name__, help='{} arguments'.format(mi.__name__))
+            mi.add_args(mi_parser)
+
+        self.tool_args, others = parser.parse_known_args()
+
+        if len(others) != 0:
+            self.tool_args = parser_mi.parse_args(others, namespace=self.tool_args)
+
+    def get_charge_bunch(self):
+        if self.charge_from_doocs:
+            charge = ChargeDoocs()
+            charge.mi = self.mi
+            self.bunch_charge = charge.get_value()
+
     def change_subtrain(self):
-        #for name in ["ALL", "SA1", "SA2", "SA3", "DUD"]:
-        #    self.ui.combo_subtrain.addItem(name)
-        #self.ui.combo_subtrain.setCurrentIndex(0)
+
         self.subtrain = self.ui.combo_subtrain.currentText()
-        #self.orbit = OrbitInterface(parent=self)
-        #self.dispersion = DispersionInterface(parent=self)
-        #self.load_lattice_files()
-        #self.lat = self.return_lat()
+
         self.arbitrary_lattice()
+        self.orbit.update_machine_interface()
 
     def load_lattice_files(self):
         names = [sec.name for sec in self.xfel_lattice.sections]
         for name in names:
             self.ui.cb_lattice.addItem(name)
-        self.ui.cb_lattice.setCurrentIndex(1)
+        self.ui.cb_lattice.setCurrentText(self.xfel_lattice.default_section)
+        #self.ui.cb_lattice.setCurrentIndex(1)
 
         self.ui.cb_lattice.currentIndexChanged.connect(self.return_lat)
         current_lat = self.ui.cb_lattice.currentText()
         section = self.xfel_lattice.get_section(current_lat)
         self.big_sequence = self.xfel_lattice.get_sequence(section)
-        self.correctors_list(seq=self.big_sequence, energy=130)
+        self.correctors_list(seq=self.big_sequence, start_pos=self.xfel_lattice.lat_zi,  energy=130)
 
     def run_settings_window(self):
         if self.settings is None:
@@ -191,14 +225,13 @@ class ManulInterfaceWindow(QMainWindow):
 
     def load_settings(self):
         logger.debug("load settings ... ")
-        filename = self.config_dir + "settings.json"
-        with open(filename, 'r') as f:
+        with open(self.config_file, 'r') as f:
             table = json.load(f)
 
         self.show_correction_result = table["show_correction_result"]
         self.gc_nlast = table["nlast"]
         self.gc_nreadings = table["nreadings"]
-        self.lattice_settings = table["lattice"]
+        #self.lattice_settings = table["lattice"]
         self.svd_epsilon_x = table["epsilon_x"]
         self.svd_epsilon_y = table["epsilon_y"]
         self.uncheck_corrs = table["uncheck_corrs"]
@@ -214,16 +247,59 @@ class ManulInterfaceWindow(QMainWindow):
         self.co_nlast_bpms = table["co_nlast"]
         self.logbook = table["logbook"]
         self.path2lattice = table["lattice"]
+        self.rm_files_dir = self.rm_files_dir_root + self.path2lattice + os.sep
 
-        subtrain_list = table["subtrain_list"]
+        if "subtrain_list" in table.keys():
+            subtrain_list = table["subtrain_list"]
+        else:
+            subtrain_list = ["ALL"]
+
+        self.ui.combo_subtrain.blockSignals(True)
+
+        self.ui.combo_subtrain.clear()
         for name in subtrain_list:
             self.ui.combo_subtrain.addItem(name)
-        if "subtrain" in table.keys():
-            indx = table["subtrain_list"].index(table["subtrain"])
+
+        self.ui.combo_subtrain.blockSignals(False)
+
+        if "subtrain" in table.keys() and table["subtrain"] in subtrain_list:
+            indx = subtrain_list.index(table["subtrain"])
         else:
             indx = 0
+            logger.warning("load_settings: 'subtrain' not in table.keys() or table['subtrain'] not in subtrain_list")
+
+        if "charge_tol" in table.keys():
+            self.charge_tol = table["charge_tol"]
+        else:
+            self.charge_tol = 0.
+
+        if "bunch_charge" in table.keys():
+            self.bunch_charge = table["bunch_charge"]
+        else:
+            self.bunch_charge = 0.5 #nC
+
+        if "charge_doocs" in table.keys():
+            self.charge_from_doocs = table["charge_doocs"]
+        else:
+            self.charge_from_doocs = False
         self.ui.combo_subtrain.setCurrentIndex(indx)
+
         self.subtrain = self.ui.combo_subtrain.currentText()
+        
+        if "server" in table.keys():
+            self.server = table["server"]
+        else:
+            self.server = "XFEL"
+
+        if "bpm_server" in table.keys():
+            self.bpm_server = table["bpm_server"]
+        else:
+            self.bpm_server = "ORBIT"
+
+        if "beta" in table.keys():
+            self.svd_beta = table["beta"]
+        else:
+            self.svd_beta = 0
 
         logger.debug("load settings ... OK")
 
@@ -251,7 +327,7 @@ class ManulInterfaceWindow(QMainWindow):
                 elem.E = E
                 self.corr_list.append(elem)
             if elem.__class__ == Cavity:
-                E += elem.v*cos(elem.phi*np.pi/180.)
+                E += elem.v*np.cos(elem.phi*np.pi/180.)
         return self.corr_list
 
     def read_quads(self):
@@ -259,13 +335,14 @@ class ManulInterfaceWindow(QMainWindow):
         self.online_calc = False
         for elem in self.quads:
             elem.kick_mrad = elem.mi.get_value()
-            logger.debug("Quad."+elem.id + " updated. k1 = "+str(elem.kick_mrad)+ " mrad")
             k1 = elem.kick_mrad/elem.l*1e-3
+            logger.debug("Quad."+elem.id + " updated. k1 = "+str(k1)+ " /  diff = " + str(k1 - elem.k1))
             elem.k1 = k1
             elem.i_kick = elem.kick_mrad
             #print(elem.i_kick)
-            elem.ui.set_init_value(elem.kick_mrad)
+            #elem.ui.set_init_value(elem.kick_mrad)
             elem.ui.set_value(elem.kick_mrad)
+            elem.ui.check_diff()
 
         for cav in self.cavs:
             try:
@@ -273,12 +350,21 @@ class ManulInterfaceWindow(QMainWindow):
             except:
                 v = 0.
                 logger.warning("Could not read cavity voltage: " +cav.id)
-            #print("Volt = ", v, cav.mi)
-            cav.v = v*0.001
-            logger.debug("Cavity: " + cav.id + ":" + str(cav.v))
+            try:
+                phi = cav.mi.get_phase()
+            except:
+                phi = 0.
+                logger.warning("Could not read cavity phase: " +cav.id)
+            logger.debug("Cavity: " + cav.id + " updated. v [GeV] = " + str(v) + " / diff [MeV] = " + str(v -  cav.v*1000))
+            logger.debug("Cavity: " + cav.id + " updated. phi = " + str(phi))
+            
+            cav.v = v*0.001/np.cos(phi*np.pi/180)
+            cav.phi = phi
+            
         self.online_calc = True
         self.lat.update_transfer_maps()
         self.tws0 = self.back_tracking()
+        self.tws0.s = 0
         logger.debug("back_tracking result: " + str(self.tws0))
         tws = twiss(self.lat, self.tws0)
         beta_x = [tw.beta_x for tw in tws]
@@ -296,7 +382,7 @@ class ManulInterfaceWindow(QMainWindow):
         logger.debug("back_tracking: ... ")
         tws0 = self.read_twiss()
 
-        section = self.xfel_lattice.return_lat("up to TL")
+        section = self.xfel_lattice.return_lat_section("up to TL")
         cell_back_track = section.seq
 
         if self.ui.cb_design_tws.isChecked():
@@ -398,8 +484,7 @@ class ManulInterfaceWindow(QMainWindow):
             quad.kick_mrad = res[i]
             quad.k1 = res[i]/quad.l/1000.
             quad.ui.set_value(quad.kick_mrad)
-
-
+            
 
     def apply_coupler_kick(self):
         logger.debug("apply_coupler_kick: checkbox:" +str(self.ui.cb_coupler_kick.isChecked()))
@@ -433,7 +518,7 @@ class ManulInterfaceWindow(QMainWindow):
         if self.ui.cb_sec_order.isChecked():
             method.global_method = SecondTM
         else:
-            method.global_method = TransferMap
+            method.global_method = SecondTM# TransferMap
         self.lat = MagneticLattice(self.lat.sequence, method=method)
 
         # calc orbit
@@ -444,6 +529,7 @@ class ManulInterfaceWindow(QMainWindow):
         #current_lat = self.ui.cb_lattice.currentText()
         #if current_lat != "Arbitrary":
         #    return 0
+
         lat_from = self.ui.sb_lat_from.value()
         lat_to = self.ui.sb_lat_to.value()
         if lat_to - 30 < lat_from:
@@ -462,7 +548,11 @@ class ManulInterfaceWindow(QMainWindow):
         # start /stop elements should be correctors !!!
         self.return_lat(start=self.corr_list[idx_frm], stop=self.corr_list[idx_to])
 
+        #self.orbit.choose_plane()
+        #self.orbit.uncheck_aircols()
+
     def return_lat(self, qt_currentIndex=None, start=None, stop=None):
+        self.get_charge_bunch()
         logger.debug("return_lat: ... ")
         self.orbit.reset_undo_database()
         current_lat = self.ui.cb_lattice.currentText()
@@ -522,6 +612,10 @@ class ManulInterfaceWindow(QMainWindow):
         # self.orbit.load_orbit_devs()
         self.orbit.calc_orbit()
         logger.debug("return_lat: ... OK")
+
+        self.orbit.choose_plane()
+        self.orbit.uncheck_aircols()
+
         return self.lat
 
 
@@ -583,8 +677,8 @@ class ManulInterfaceWindow(QMainWindow):
 
     def plot_design_twiss(self):
         tws = twiss(self.lat, self.tws_des)
-
-        s = np.array([tw.s for tw in tws]) + self.lat_zi
+        dz = self.lat_zi - self.tws_des.s
+        s = np.array([tw.s for tw in tws]) + dz
         bx = np.array([tw.beta_x for tw in tws])
         by = np.array([tw.beta_y for tw in tws])
         #self.s_des + self.lat_zi
@@ -596,13 +690,11 @@ class ManulInterfaceWindow(QMainWindow):
         #lat = MagneticLattice(cell)
         if self.online_calc == False:
             return
-
         # L = 0
         for elem in self.lat.sequence:
             if elem.__class__ in [Quadrupole]:
-                #print(elem.id, elem.row)
                 elem.kick_mrad = elem.ui.get_value()
-                elem.k1 = elem.kick_mrad/elem.l/1000.
+                elem.k1 = elem.kick_mrad/elem.l/1000 if elem.l != 0 else 0
                 if np.abs(np.abs(elem.kick_mrad) - np.abs(elem.i_kick))> 1:
                     self.r_items[elem.ui.row].setBrush(pg.mkBrush("r"))
                     self.ui.tableWidget.item(elem.row, 1).setForeground(QtGui.QColor(255, 101, 101))  # red
@@ -614,8 +706,11 @@ class ManulInterfaceWindow(QMainWindow):
                 sizes[3] = 10*elem.kick_mrad/self.quad_ampl
                 r.setRect(sizes[0], sizes[1], sizes[2], sizes[3])
         self.lat.update_transfer_maps()
-        tws = twiss(self.lat, self.tws0)
-
+        self.tws0.s = 0
+        if self.mi.twiss_periodic is True:
+            tws = twiss(self.lat, None)
+        else:
+            tws = twiss(self.lat, self.tws0)
         beta_x = [tw.beta_x for tw in tws]
         beta_y = [tw.beta_y for tw in tws]
         dx = [tw.Dx for tw in tws]
@@ -818,10 +913,10 @@ def main():
 
 
     #show app
-    #window.setWindowIcon(QtGui.QIcon('gui/manul.png'))
+    #window.setWindowIcon(QtGui.QIcon('gui/angry_manul.png'))
     # setting the path variable for icon
-    #path = os.path.join(os.path.dirname(sys.modules[__name__].__file__), 'gui/manul.png')
-    #app.setWindowIcon(QtGui.QIcon(path))
+    path = os.path.join(os.path.dirname(sys.modules[__name__].__file__), 'gui/manul.png')
+    app.setWindowIcon(QtGui.QIcon(path))
     window.show()
     window.raise_()
     #Build documentaiton if source files have changed
